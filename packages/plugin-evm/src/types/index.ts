@@ -28,6 +28,7 @@ export interface TokenWithBalance {
     formattedBalance: string;
     priceUSD: string;
     valueUSD: string;
+    symbol: string;
 }
 
 export interface WalletBalance {

@@ -76,6 +76,7 @@ export class TokenProvider {
             formattedBalance,
             priceUSD: tokenInfo.priceUSD,
             valueUSD: "0", // TODO: Implement value calculation
+            symbol: tokenInfo.symbol,
         };
     }
 
