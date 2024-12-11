@@ -8,9 +8,11 @@ import type {
 } from "../types";
 import { checkTokenBalanceTemplate } from "../templates";
 import {
+    Action,
     composeContext,
     elizaLogger,
     generateMessageResponse,
+    HandlerCallback,
     ModelClass,
     type IAgentRuntime,
     type Memory,
@@ -61,7 +63,7 @@ export class CheckTokenBalanceAction {
     }
 }
 
-export const checkTokenBalanceAction = {
+export const checkTokenBalanceAction: Action = {
     name: "checkTokenBalance",
     description:
         "Checks the balance of a token for a given wallet on a given chain",
@@ -69,7 +71,8 @@ export const checkTokenBalanceAction = {
         runtime: IAgentRuntime,
         message: Memory,
         state: State,
-        options: any
+        options: any,
+        callback?: HandlerCallback
     ) => {
         const walletProvider = new WalletProvider(runtime);
         const tokenProvider = new TokenProvider(walletProvider);
@@ -104,11 +107,30 @@ export const checkTokenBalanceAction = {
             chainToCheck: chainToCheck as SupportedChain,
         };
 
-        return checkAgentTokenBalance
-            ? action.checkAgentTokenBalance(checkTokenBalanceParams)
-            : action.checkTokenBalance(checkTokenBalanceParams);
+        let success = false;
+        let callbackText = "";
+        try {
+            const result = checkAgentTokenBalance
+                ? await action.checkAgentTokenBalance(checkTokenBalanceParams)
+                : await action.checkTokenBalance(checkTokenBalanceParams);
+
+            success = true;
+            callbackText = `${walletToCheck} has ${(await result).formattedBalance} ${result.symbol}`;
+        } catch (error) {
+            success = false;
+            callbackText = `Couldn't get balance for ${tokenAddress} on ${chainToCheck}: ${error}`;
+        }
+
+        if (!callback) {
+            return success;
+        }
+
+        callback({
+            text: callbackText,
+        });
+
+        return success;
     },
-    template: checkTokenBalanceTemplate,
     validate: async (runtime: IAgentRuntime) => {
         const privateKey = runtime.getSetting("EVM_PRIVATE_KEY");
         return typeof privateKey === "string" && privateKey.startsWith("0x");

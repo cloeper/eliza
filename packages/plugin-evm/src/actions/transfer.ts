@@ -1,25 +1,18 @@
-import {
-    Address,
-    ByteArray,
-    createWalletClient,
-    http,
-    HttpTransport,
-    parseEther,
-    type Hex,
-} from "viem";
-import { DEFAULT_CHAIN_CONFIGS, WalletProvider } from "../providers/wallet";
+import { Address, ByteArray, parseEther, type Hex } from "viem";
+import { WalletProvider } from "../providers/wallet";
 import type { SupportedChain, Transaction, TransferParams } from "../types";
 import { transferTemplate } from "../templates";
 import {
+    Action,
     composeContext,
     elizaLogger,
     generateMessageResponse,
+    HandlerCallback,
     ModelClass,
     type IAgentRuntime,
     type Memory,
     type State,
 } from "@ai16z/eliza";
-import { privateKeyToAccount } from "viem/accounts";
 
 export { transferTemplate };
 export class TransferAction {
@@ -33,8 +26,6 @@ export class TransferAction {
 
         const walletClient = this.walletProvider.getWalletClient();
         const [fromAddress] = await walletClient.getAddresses();
-
-        elizaLogger.log("Current chain:", walletClient);
 
         try {
             const hash = await walletClient.sendTransaction({
@@ -69,14 +60,15 @@ export class TransferAction {
     }
 }
 
-export const transferAction = {
+export const transferAction: Action = {
     name: "transfer",
     description: "Transfer tokens between addresses on the same chain",
     handler: async (
         runtime: IAgentRuntime,
         message: Memory,
         state: State,
-        options: any
+        options: any,
+        callback?: HandlerCallback
     ) => {
         const walletProvider = new WalletProvider(runtime);
         const action = new TransferAction(walletProvider);
@@ -103,9 +95,28 @@ export const transferAction = {
             data: "0x",
         };
 
-        return action.transfer(runtime, transferParams);
+        let success = false;
+        let callbackText = "";
+        try {
+            const result = await action.transfer(runtime, transferParams);
+
+            success = true;
+            callbackText = `${amount} sent to ${toAddress}. Transaction hash: ${result.hash}`;
+        } catch (error) {
+            success = false;
+            callbackText = `Failed to send ${amount} to ${toAddress}: ${error}`;
+        }
+
+        if (!callback) {
+            return success;
+        }
+
+        callback({
+            text: callbackText,
+        });
+
+        return success;
     },
-    template: transferTemplate,
     validate: async (runtime: IAgentRuntime) => {
         const privateKey = runtime.getSetting("EVM_PRIVATE_KEY");
         return typeof privateKey === "string" && privateKey.startsWith("0x");
